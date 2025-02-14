@@ -21,7 +21,7 @@ Each file is represented by an **inode**, which contains:
 - **844 direct pointers** (each pointing to a 4 KB block).
 - **1 single indirect pointer** (points to a block containing 1024 additional pointers).
 - **1 double indirect pointer** (points to a block containing 1024 pointers, each pointing to another block of 1024 pointers).
-- **Other metadata** (file size, permissions, timestamps, etc.).
+- **Other metadata** (file size, timestamps (in process...), etc.).
 
 ### Maximum File Size Calculation
 
