@@ -3,32 +3,80 @@
     // Конструктор
     Ext2FileSystem::Ext2FileSystem(int total_blocks, int total_inodes) {
         memory_size = total_blocks * BLOCK_SIZE;
-        memory = new char[memory_size];  // Выделение памяти в куче
+        // Выделение выровненной памяти в куче
+        memory = (char*)(std::aligned_alloc(16,memory_size));
         std::memset(memory, 0, memory_size);
 
-        // Инициализация суперблока
-        superblock.total_blocks = total_blocks;
-        superblock.total_inodes = total_inodes;
-        superblock.free_blocks = total_blocks;
-        superblock.free_inodes = total_inodes;
+        uint32_t block_index = 0;
+        uint64_t offset = block_index * BLOCK_SIZE;
+        superblock = (SuperBlock*)(memory + offset);
 
-        superblock.MAX_INODES = MAX_INODES;
-        superblock.BLOCK_SIZE = BLOCK_SIZE;
-        superblock.MAX_BLOCKS = MAX_BLOCKS;
-        superblock.DIRECT_POINTERS = DIRECT_POINTERS;
+        // Инициализация суперблока
+        superblock->total_blocks = total_blocks;
+        superblock->total_inodes = total_inodes;
+        superblock->free_blocks = total_blocks-1;
+        superblock->free_inodes = total_inodes;
+
+        superblock->MAX_INODES = MAX_INODES;
+        superblock->BLOCK_SIZE = BLOCK_SIZE;
+        superblock->MAX_BLOCKS = MAX_BLOCKS;
+        superblock->DIRECT_POINTERS = DIRECT_POINTERS;
 
         // Инициализация битовых карт
-        block_bitmap.resize(total_blocks, false);
-        inode_bitmap.resize(total_inodes, false);
+        void* target_address;
+        block_index++;
+        // аллоцируются inode_bitmap
+        offset = block_index * BLOCK_SIZE;
+        target_address = memory + offset;
+        inode_bitmap = new (target_address) std::bitset<MAX_INODES>();
+        // zero
+        memset(target_address,0,BLOCK_SIZE);
+        superblock->free_blocks--;
+
+
+        // alloc MAX_BLOCKS block_bitmap
+
+        block_index++;
+
+        offset = block_index * BLOCK_SIZE;
+        target_address = (void*)(memory + offset);
+        block_bitmap = new (target_address) std::bitset<MAX_BLOCKS>();
+        int blck_cnd = MAX_BLOCKS / (BLOCK_SIZE * 8);
+        memset(target_address,0,BLOCK_SIZE*blck_cnd);
+        block_bitmap->set(0); //superblock
+        block_bitmap->set(1); //inode_bitmap
+
+        for (int i = 0; i< blck_cnd; i++){
+            superblock->free_blocks--;
+            block_bitmap->set(i+2);
+        }
+
+
+
+        //  аллоцируются inodes
+        offset = (2+blck_cnd) * BLOCK_SIZE;
+        inodes = (Inode*)(memory + offset);
+        for (int i = 0; i< MAX_INODES; i++){
+            superblock->free_blocks--;
+            block_bitmap->set(i+2+blck_cnd);
+        }
+
+
+        //inode_bitmap.resize(total_inodes, false);
+
+
+
+        //block_bitmap.resize(total_blocks, false);
+
 
         // Инициализация таблицы inode
-        inodes.resize(total_inodes);
+        //inodes.resize(total_inodes);
         inode_index = 0;
     }
 
     // Деструктор
     Ext2FileSystem::~Ext2FileSystem() {
-        delete [] memory;  // Освобождение памяти из кучи
+        std::free(memory); // Освобождение памяти из кучи
     }
 
     // Функция для вычисления хеша FNV-1a
@@ -73,10 +121,10 @@
 
     // Выделение блока
     uint32_t Ext2FileSystem::allocate_block() {
-        for (int i = 0; i < superblock.total_blocks; ++i) {
-            if (!block_bitmap[i]) {
-                block_bitmap[i] = true;
-                superblock.free_blocks--;
+        for (int i = 0; i < superblock->total_blocks; ++i) {
+            if (!block_bitmap->test(i)) {
+                block_bitmap->set(i); // = true;
+                superblock->free_blocks--;
                 memset((void*)(memory+i*BLOCK_SIZE),0xFF,BLOCK_SIZE);
                 return i;
             }
@@ -86,18 +134,18 @@
 
     // Освобождение блока
     void Ext2FileSystem::free_block(uint32_t block_index) {
-        if (block_index >= 0 && block_index < superblock.total_blocks && block_bitmap[block_index]) {
-            block_bitmap[block_index] = false;
-            superblock.free_blocks++;
+        if (block_index >= 0 && block_index < superblock->total_blocks && block_bitmap->test(block_index)) {
+            block_bitmap->reset(block_index); // = false;
+            superblock->free_blocks++;
         }
     }
 
     // Выделение inode
     uint32_t Ext2FileSystem::allocate_inode() {
-        for (int i = 0; i < superblock.total_inodes; ++i) {
-            if (!inode_bitmap[i]) {
-                inode_bitmap[i] = true;
-                superblock.free_inodes--;
+        for (int i = 0; i < superblock->total_inodes; ++i) {
+            if (!inode_bitmap->test(i)) {
+                inode_bitmap->set(i); // = true;
+                superblock->free_inodes--;
                 return i;
             }
         }
@@ -106,17 +154,17 @@
 
     // Освобождение inode
     void Ext2FileSystem::free_inode(uint32_t inode_index) {
-        if (inode_index >= 0 && inode_index < superblock.total_inodes && inode_bitmap[inode_index]) {
-            inode_bitmap[inode_index] = false;
-            superblock.free_inodes++;
+        if (inode_index >= 0 && inode_index < superblock->total_inodes && inode_bitmap->test(inode_index)) {
+            inode_bitmap->reset(inode_index); // = false;
+            superblock->free_inodes++;
         }
     }
 
     uint32_t Ext2FileSystem::open(const std::string& name) {
         std::hash<std::string> hash;
         size_t hash_in = hash(name);
-        for (uint32_t i = 0; i<inode_bitmap.size(); i++){
-            if (inode_bitmap[i]){
+        for (uint32_t i = 0; i<inode_bitmap->size(); i++){
+            if (inode_bitmap->test(i)){
                 if (inodes[i].name_hash == hash_in){
                     //uint64_t * seek_write = (uint64_t*)inodes[i].reserve;
                     //*seek_write = 0; // Seek(0) внутрений указатель в файле APPEND only files
@@ -136,15 +184,15 @@
     }
 
     uint32_t Ext2FileSystem::next(){
-        if (superblock.free_inodes == superblock.total_inodes ) return -1; //нет inodes
-        for (uint32_t i = inode_index; i<inode_bitmap.size(); i++){ // перебор с inod-ов с позиции inode_index
-             if (inode_bitmap[i]) { // inode занят
+        if (superblock->free_inodes == superblock->total_inodes ) return -1; //нет inodes
+        for (uint32_t i = inode_index; i<inode_bitmap->size(); i++){ // перебор с inod-ов с позиции inode_index
+            if (inode_bitmap->test(i)) { // inode занят
                 inode_index = i+1; // в следующий запрос начинаем со следующего элемента
                 return i;
             }
         }
         for (uint32_t i = 0; i<inode_index; i++){
-            if (inode_bitmap[i]) { // inode занят
+            if (inode_bitmap->test(i)) { // inode занят
                 inode_index = i+1; // в следующий запрос начинаем со следующего элемента
                 return i;
             }
@@ -160,6 +208,7 @@
         int bytes_to_write = 0;
         uint32_t start_block_index = 0;
         uint32_t in_block_offset = 0;
+        //Inode& inode = inodes[fd];
         uint64_t * seek = (uint64_t*)inodes[fd].reserve;
         /*
             123 % 10 = 3 ( 3 - цифра единиц)
@@ -171,7 +220,7 @@
         for (int i = start_block_index; i < DIRECT_POINTERS && bytes_written < size; ++i) {
             //if (inodes[fd].direct_block_pointer[i] != -1) continue;  //это пока не сработало
             if (in_block_offset != 0){
-                offset = i * BLOCK_SIZE;
+                offset = inodes[fd].direct_block_pointer[i] * BLOCK_SIZE;
                 bytes_to_write = std::min((int)(BLOCK_SIZE - in_block_offset), (int)size);
                 std::memcpy(memory + offset + in_block_offset, data, bytes_to_write);
                 bytes_written += bytes_to_write;
@@ -313,7 +362,7 @@
 
     // Чтение файла inode_index -> fd
      size_t Ext2FileSystem::read(uint32_t fd, char* data, size_t size) {
-        if (fd >= superblock.total_inodes || !inode_bitmap[fd]) {
+         if (fd >= superblock->total_inodes || !inode_bitmap->test(fd)) {
             //std::cout << "File with inode " << fd << " not found\n";
             return 0;
         }
@@ -333,10 +382,8 @@
         in_block_offset = *seek % BLOCK_SIZE;
 
         for (int i = start_block_index; i < DIRECT_POINTERS && inode.direct_block_pointer[i] != -1 && bytes_total_read < size; ++i) {
-
-
             if (in_block_offset != 0){
-                offset = i * BLOCK_SIZE;
+                offset = inode.direct_block_pointer[i] * BLOCK_SIZE;
                 int bytes = std::min((int)(BLOCK_SIZE - in_block_offset), (int)size);
                 std::memcpy(data, memory + offset + in_block_offset , bytes);
                 bytes_total_read += bytes;
@@ -397,24 +444,20 @@
             uint32_t i_start_block_index = (uint32_t)((*seek) / BLOCK_SIZE) ;
             i_start_block_index -= (DIRECT_POINTERS + RECORDS_CNT);
             uint32_t j_start_block_index = i_start_block_index / RECORDS_CNT;
+
             i_start_block_index = i_start_block_index % RECORDS_CNT;
             in_block_offset = *seek % BLOCK_SIZE;
 
             offset = inodes[fd].indirect2_pointer * BLOCK_SIZE; // memory +
             j_pointers = (Inode_pointers*)(memory + offset); // double indirect pointers
 
-
             for (int j = j_start_block_index; j < RECORDS_CNT && j_pointers->block_pointer[j] !=-1 && bytes_total_read < size; ++j){
-
                 offset = j_pointers->block_pointer[j] * BLOCK_SIZE; // memory +
                 i_pointers = (Inode_pointers*)(memory + offset); // double indirect pointers
-
                 uint32_t i_start_block_index = (uint32_t)((*seek) / BLOCK_SIZE) ;
                 i_start_block_index -= (DIRECT_POINTERS + RECORDS_CNT);
                 i_start_block_index = i_start_block_index % RECORDS_CNT;
-
                 for (int i = i_start_block_index; i < RECORDS_CNT && bytes_total_read < size; ++i){
-
                     if (in_block_offset != 0){
                         offset = (i_pointers->block_pointer[i]) * BLOCK_SIZE;
                         bytes_to_read = std::min((int)(BLOCK_SIZE - in_block_offset), (int)size);
@@ -454,10 +497,10 @@
 
      void Ext2FileSystem::dir(std::vector<std::string>& dir){
         dir.clear();
-        if (superblock.free_inodes == superblock.total_inodes ) return ; //нет inodes
+         if (superblock->free_inodes == superblock->total_inodes ) return ; //нет inodes
 
-        for (int i=0; i < this->inode_bitmap.size(); i++){
-            if (inode_bitmap.at(i)) {
+        for (int i=0; i < this->inode_bitmap->size(); i++){
+            if (inode_bitmap->test(i)) {
                 std::string s(inodes[i].filename);
                 dir.push_back(s);
             }
@@ -465,7 +508,7 @@
     }
 
      size_t Ext2FileSystem::dir_size(){
-        return superblock.total_inodes-superblock.free_inodes;
+         return superblock->total_inodes-superblock->free_inodes;
     }
 
      uint64_t Ext2FileSystem::size(uint32_t fd){
@@ -474,7 +517,7 @@
 
     // Удаление файла inode_index -> fd
     void Ext2FileSystem::rm(uint32_t fd) {
-        if (fd >= superblock.total_inodes || !inode_bitmap[fd]) {
+        if (fd >= superblock->total_inodes || !inode_bitmap->test(fd)) {
             std::cout << "File in inode " << fd << " not found\n";
             return;
         }
@@ -547,7 +590,7 @@
     // Вывод состояния файловой системы
     void Ext2FileSystem::print_fs_state() {
         std::cout << "FS Status:\n";
-        std::cout << "Total Blocks: " << superblock.total_blocks << ", Free Blocks: " << superblock.free_blocks << "\n";
-                std::cout << "Total inodes: " << superblock.total_inodes << ", Free inodes: " << superblock.free_inodes << "\n";
+        std::cout << "Total Blocks: " << superblock->total_blocks << ", Free Blocks: " << superblock->free_blocks << "\n";
+        std::cout << "Total inodes: " << superblock->total_inodes << ", Free inodes: " << superblock->free_inodes << "\n";
     }
 

@@ -5,14 +5,18 @@
 #include <cstring>
 #include <stdexcept>
 #include <chrono>
+#include <iostream>
+#include <bitset>
+#include <cstdlib>  // Для malloc/free
+#include <new>      // Для placement new
 
 // Константы
-const int BLOCK_SIZE = 4096;   // Размер блока в байтах 1024
-const int MAX_BLOCKS = 256000;   // Максимальное количество блоков
-const int MAX_INODES = 16;    // Максимальное количество inode
-const int INODE_SIZE = BLOCK_SIZE;   // Размер inode в байтах
-const int RECORDS_CNT = BLOCK_SIZE >> 2; // количество записей в блоке указателей
-const int DIRECT_POINTERS = 844; // количество прямых указателей на блоки
+const int BLOCK_SIZE = 4096;                            // Размер блока в байтах 1024
+const int MAX_BLOCKS = 256*1024;                        // Максимальное количество блоков 265K = 1GB
+const int MAX_INODES = 1024;                            // Максимальное количество файлов
+const int INODE_SIZE = BLOCK_SIZE;                      // Размер inode в байтах
+const int RECORDS_CNT = BLOCK_SIZE >> 2;                // количество записей в блоке указателей
+const int DIRECT_POINTERS = 844;                        // количество прямых указателей на блоки
 
 // Структура суперблока
 struct SuperBlock {
@@ -48,10 +52,12 @@ struct Inode_pointers {
 // Класс файловой системы EXT2
 class Ext2FileSystem {
 private:
-    SuperBlock superblock;               // Суперблок
-    std::vector<bool> block_bitmap;      // Битовая карта блоков
-    std::vector<bool> inode_bitmap;      // Битовая карта inode
-    std::vector<Inode> inodes;           // Таблица inode
+    SuperBlock* superblock;               // Суперблок
+    //std::vector<bool> block_bitmap;      // Битовая карта блоков
+    std::bitset<MAX_BLOCKS>* block_bitmap;
+    //std::vector<bool> inode_bitmap;      // Битовая карта inode
+    std::bitset<MAX_INODES>* inode_bitmap;
+    Inode* inodes;           // Таблица inode
     char* memory;                        // Память, выделенная в куче
     size_t memory_size;                  // Общий размер памяти
     size_t inode_index;                  // при переборе next() inode_index движется вперед

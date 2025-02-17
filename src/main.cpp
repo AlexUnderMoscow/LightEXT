@@ -299,14 +299,15 @@ TEST(test_all_size) {
     file.close();
     size_t data_hash, out_hash;
 
-    //разные размеры файла, но примерно по sz байт
-    for (int sz = file_size; sz < file_size+1; sz+=1){
+    //разные размеры файла, но примерно по XXX МБ
+    int XXX = 87000;
+    for (int sz = XXX; sz < XXX+1; sz+=1){
 
     //for (int sz = file_size; sz < file_size+1; sz+=1){
         data_hash = fs.fnv1a_hash(buf,sz);
         uint32_t fd = fs.open("file.txt");
         int write_size = 0;
-        int part = 14000;
+        int part = 15000;
 
         start = std::chrono::system_clock::now();
 
@@ -336,9 +337,9 @@ TEST(test_all_size) {
         total_read_time += read_time.count();
 
         out_hash = fs.fnv1a_hash(buf2,sz);
-        if (out_hash != data_hash){
+        //if (out_hash != data_hash){
             ASSERT(out_hash == data_hash);
-        }
+        //}
 
         start = std::chrono::system_clock::now();
         std::cout << "Before delete" << std::endl;
@@ -363,19 +364,53 @@ TEST(test_all_size) {
     std::cout << "read speed = " << ((float)(transmit_bytes / (1024 * 1024)) / total_read_time)  << " Mbps"<< std::endl;
     std::cout << "rm speed = " << ((float)(transmit_bytes / (1024 * 1024)) / total_rm_time)  << " Mbps" << std::endl;
     //std::time_t write_time = std::chrono::system_clock::to_time_t(total_write_time);
+}
 
 
+
+void bitset_test(){
+        const size_t N = MAX_INODES;  // Количество бит в bitset
+    //
+        // 1. Выделяем память
+        size_t sz = sizeof(std::bitset<N>);
+        void* buffer = std::malloc(sz);
+
+        if (!buffer) {
+            std::cerr << "Ошибка выделения памяти!" << std::endl;
+            return;
+        }
+        // 2. Размещаем объект std::bitset<N> в выделенной памяти (placement new)
+        std::bitset<N>* bitset_ptr = new (buffer) std::bitset<N>;
+        // 3. Работаем с объектом
+        bitset_ptr->set(0);   //
+        bitset_ptr->set(1);   //
+        bitset_ptr->set(2);   //
+        bitset_ptr->set(3);   // Устанавливаем 3-й бит
+        bitset_ptr->set(7);   // Устанавливаем 7-й бит
+        bitset_ptr->set(64);
+        bitset_ptr->set(65);
+        bitset_ptr->reset(65);
+        bool b = bitset_ptr->test(65);
+        std::cout << "Bitset: " << *bitset_ptr << std::endl;
+        // 4. Вызываем явный деструктор (так как память выделена вручную)
+        bool a = bitset_ptr->test(64);
+        bitset_ptr->reset(3);
+        // 5. Освобождаем память
+        std::free(buffer);
+        return;
 }
 
 
 int main() {
+    //bitset_test();
+    //return 0;
     Ext2FileSystem fs;
     printf(GREEN_TEXT "%s\n" RESET_TEXT, "Tests:");
     RUN_TEST(test_struct_size);
 
     //RUN_TEST(test_xtra_small_files);
 
-    //RUN_TEST(test_small_file);
+   // RUN_TEST(test_small_file);
 
     //RUN_TEST(test_medium_file);
 
