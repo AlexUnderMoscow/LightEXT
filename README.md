@@ -8,7 +8,7 @@
 
 ### Key Features:
 - **In-memory operation:** Data is stored in RAM for ultra-fast access.
-- **Block size:** 4 KB.
+- **Block size:** 4 KB ( = RAM page size).
 - **Direct pointers:** 844 (optimized for quick access).
 - **Maximum files:** 32768 (1 inode bitmap, 128 MB inodes).
 - **Maximum length of filename:** 511 ASCII chars.
