@@ -9,6 +9,7 @@
 - **Block size:** 4 KB.
 - **Direct pointers:** 844 (optimized for quick access).
 - **Maximum files:** 32768 (1 inode bitmap, 128 MB inodes).
+- **Maximum length of filename:** 511 ASCII chars.
 - **Single indirect pointer:** ✅ (Supported).
 - **Double indirect pointer:** ✅ (Supported).
 - **Triple indirect pointer:** ❌ (Not included).
