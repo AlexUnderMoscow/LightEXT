@@ -8,7 +8,7 @@
 - **In-memory operation:** Data is stored in RAM for ultra-fast access.
 - **Block size:** 4 KB.
 - **Direct pointers:** 844 (optimized for quick access).
-- **Maximum 32768 files (1 inode bitmap)**
+- **Maximum files:** 32768 files (1 inode bitmap, 128 MB inodes).
 - **Single indirect pointer:** ✅ (Supported).
 - **Double indirect pointer:** ✅ (Supported).
 - **Triple indirect pointer:** ❌ (Not included).
