@@ -1,5 +1,7 @@
 # LightEXT - In-Memory File System
 
+<img src="logo.png" alt="logo"/>
+
 ## Overview
 
 **LightEXT** is a lightweight, in-memory file system inspired by EXT2, designed for high-speed file operations. Unlike traditional file systems, **LightEXT** operates entirely in RAM, making it ideal for temporary storage, caching, and rapid file access.
