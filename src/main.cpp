@@ -267,7 +267,7 @@ TEST(test_all_size) {
     uint64_t rm_counts = 0;
 
     // Имя файла для чтения
-    const std::string filename = "../../testfiles/87K.jpg"; //xtra_large.txt
+    const std::string filename = "../../testfiles/1920000.wav"; //xtra_large.txt
     std::ifstream file(filename, std::ifstream::ate | std::ifstream::binary);
     if (!file.is_open()) {
         std::cerr << "not opened: " << filename << std::endl;
@@ -300,7 +300,7 @@ TEST(test_all_size) {
     size_t data_hash, out_hash;
 
     //разные размеры файла, но примерно по XXX МБ
-    int XXX = 87000;
+    int XXX = 8700000;
     for (int sz = XXX; sz < XXX+1; sz+=1){
 
     //for (int sz = file_size; sz < file_size+1; sz+=1){
@@ -367,6 +367,147 @@ TEST(test_all_size) {
 }
 
 
+TEST(test_2x_files_all_size) {
+    Ext2FileSystem fs;
+    std::cout << "Before test" << std::endl;
+    fs.print_fs_state();
+    std::chrono::duration<double> write_time, read_time , rm_time;
+    double total_write_time, total_read_time , total_rm_time;
+    total_write_time = 0;
+    total_read_time = 0;
+    total_rm_time = 0;
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    uint64_t transmit_bytes = 0;
+    uint64_t rm_counts = 0;
+
+    // начало работы с файлами ------------------------------------------------
+    // Имя файла для чтения
+    const std::string filename1 = "../../testfiles/87K.jpg"; //51M.pdf
+    const std::string filename2 = "../../testfiles/87K.jpg"; //51M.pdf
+
+    std::ifstream file1(filename1, std::ifstream::ate | std::ifstream::binary);
+    if (!file1.is_open()) {
+        std::cerr << "not opened: " << filename1 << std::endl;
+        return;
+    }
+
+    std::ifstream file2(filename2, std::ifstream::ate | std::ifstream::binary);
+    if (!file1.is_open()) {
+        std::cerr << "not opened: " << filename1 << std::endl;
+        return;
+    }
+
+    // Перемещаем указатель в конец файла, чтобы узнать его размерs
+    file1.seekg(0, std::ios::end);
+    size_t file_size1 = file1.tellg(); // Размер файла в байтах
+    file1.seekg(0, std::ios::beg);            // Возвращаемся в начало файла
+
+    file2.seekg(0, std::ios::end);
+    size_t file_size2 = file2.tellg(); // Размер файла в байтах
+    file2.seekg(0, std::ios::beg);            // Возвращаемся в начало файла
+
+    // Проверяем, если файл пуст
+    if (file_size1 == 0) {
+        std::cerr << "file empty" << std::endl;
+        return;
+    }
+
+    // Проверяем, если файл пуст
+    if (file_size2 == 0) {
+        std::cerr << "file empty" << std::endl;
+        return;
+    }
+
+    // Создаем буфер для хранения содержимого файла
+    char* buf = new char[file_size1+1];
+    memset(buf,0x0, file_size1+1);
+    char* buf2 = new char[file_size1+1];
+    memset(buf2,0x0, file_size1+1);
+    // Читаем содержимое файла в буфер
+    if (!file1.read(buf, file_size1)) {
+        std::cerr << "file read error" << std::endl;
+        return;
+    }
+    // Закрываем файл
+    file1.close();
+
+
+    // Создаем буфер для хранения содержимого файла
+    char* buf_2 = new char[file_size2+1];
+    memset(buf_2,0x0, file_size2+1);
+    char* buf2_2 = new char[file_size2+1];
+    memset(buf2_2,0x0, file_size2+1);
+    // Читаем содержимое файла в буфер
+    if (!file2.read(buf, file_size2)) {
+        std::cerr << "file read error" << std::endl;
+        return;
+    }
+    // Закрываем файл
+    file2.close();
+
+
+
+    // с файлами окончена работа ------------------------------------------------
+    size_t data_hash1, out_hash1 , data_hash2, out_hash2 ;
+
+    //разные размеры файла, но примерно по XXX КБ (МБ)
+    int XXX = 70;
+
+    uint32_t fd1 = fs.open("file1.txt");
+    uint32_t fd2 = fs.open("file2.txt");
+    XXX = XXX * 1024;// *1024;
+
+    for (int sz = XXX; sz < XXX+1; sz+=1){
+        data_hash1 = fs.fnv1a_hash(buf,sz);
+        data_hash2 = fs.fnv1a_hash(buf_2,sz);
+
+        int write_size = 0;
+        int part = 15000;
+
+        while (write_size < sz){
+            int bytes = std::min(part, sz-write_size);
+            write_size+=fs.write(fd1,buf+write_size,bytes);
+
+            fs.write(fd2,buf_2+write_size,bytes);
+        }
+
+        memset(buf2,0x0,sz+1);
+        memset(buf2_2,0x0,sz+1);
+        int read_size = 0;
+        part = 16000;
+        while (read_size < sz){
+            int bytes = std::min(part, sz-read_size);
+            transmit_bytes+=bytes;
+            read_size+=fs.read(fd1,buf2+read_size,bytes);
+
+            fs.read(fd2,buf2_2+read_size,bytes);
+        }
+
+        out_hash1 = fs.fnv1a_hash(buf2,sz);
+        out_hash2 = fs.fnv1a_hash(buf2_2,sz);
+
+        ASSERT(out_hash1 == data_hash1);
+        ASSERT(out_hash2 == data_hash2);
+        std::cout << "Before delete" << std::endl;
+        std::vector<DirEntry> dir;
+        fs.dir(dir);
+
+        for (int i=0; i<dir.size(); i++){
+            std::string s(dir.at(i).filename);
+            std::cout << s << " " << dir.at(i).file_size << " " << fs.time2str(dir.at(i).creation_time) <<std::endl;
+        }
+        fs.print_fs_state();
+        fs.rm(fd1);
+        fs.rm(fd2);
+    }
+    std::cout << "End" << std::endl;
+    fs.print_fs_state();
+    delete [] buf;
+    delete [] buf2;
+    delete [] buf_2;
+    delete [] buf2_2;
+}
+
 
 void bitset_test(){
         const size_t N = MAX_INODES;  // Количество бит в bitset
@@ -416,10 +557,10 @@ int main() {
 
     //RUN_TEST(test_large_file);
     std::cout << std::flush;
-    RUN_TEST(test_all_size);
+    //RUN_TEST(test_all_size);
+    RUN_TEST(test_2x_files_all_size);
 
-    std::vector<std::string> dir;
-    fs.dir(dir);
+
     return 0;
 }
 

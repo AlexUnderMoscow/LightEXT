@@ -49,6 +49,12 @@ struct Inode_pointers {
     uint32_t block_pointer[RECORDS_CNT];        // Прямые указатели на блоки данных
 };
 
+struct DirEntry {
+    char filename[512];
+    uint64_t file_size;
+    time_t creation_time;
+};
+
 // Класс файловой системы EXT2
 class Ext2FileSystem {
 private:
@@ -78,6 +84,9 @@ private:
     uint32_t allocate_inode();
     // Освобождение inode
     void free_inode(uint32_t inode_index);
+    // текущее время
+    //time_t timeNow();
+
 
 public:
     uint32_t open(const std::string& name);
@@ -86,13 +95,15 @@ public:
     size_t write(uint32_t fd, const char* data, size_t size);
     // Чтение файла inode_index -> fd
     size_t read(uint32_t fd, char* data, size_t size);
-    void dir(std::vector<std::string>& dir);
+    void dir(std::vector<DirEntry>& dir);
     size_t dir_size();
     uint64_t size(uint32_t fd);
     // Удаление файла inode_index -> fd
     void rm(uint32_t fd);
     // Вывод состояния файловой системы
     void print_fs_state();
+    // вывод времени в удобном формате
+    std::string time2str(time_t time);
     // Расчет хэша имени файла
     size_t fnv1a_hash(const char* buffer, size_t size);
 

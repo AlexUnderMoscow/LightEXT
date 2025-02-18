@@ -51,8 +51,6 @@
             block_bitmap->set(i+2);
         }
 
-
-
         //  аллоцируются inodes
         offset = (2+blck_cnd) * BLOCK_SIZE;
         inodes = (Inode*)(memory + offset);
@@ -60,17 +58,6 @@
             superblock->free_blocks--;
             block_bitmap->set(i+2+blck_cnd);
         }
-
-
-        //inode_bitmap.resize(total_inodes, false);
-
-
-
-        //block_bitmap.resize(total_blocks, false);
-
-
-        // Инициализация таблицы inode
-        //inodes.resize(total_inodes);
         inode_index = 0;
     }
 
@@ -109,7 +96,7 @@
         inode.filename[name_size] = 0;             // конец строки
         inode.name_hash = hash_filename;
         inode.fname_size = name_size;
-        inode.creation_time = 0;                    //время пока не контролируется
+        inode.creation_time = std::time(nullptr);;                    //время пока не контролируется
         inode.indirect1_pointer = -1;
         inode.indirect2_pointer = -1;
         inode.indirect3_pointer = -1;
@@ -118,6 +105,18 @@
         *seek = 0; // Seek(0) внутрений указатель в файле
         return inode_index;
     }
+
+    std::string Ext2FileSystem::time2str(time_t time){
+        time_t t = time;
+        auto tm = *std::localtime(&t);
+        std::ostringstream oss;
+        oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
+        return oss.str();
+    }
+
+    // time_t Ext2FileSystem::timeNow(){
+    //     return  std::time(nullptr);
+    // }
 
     // Выделение блока
     uint32_t Ext2FileSystem::allocate_block() {
@@ -245,7 +244,7 @@
         }
         Inode_pointers* pointers = nullptr;
         // теперь непрямые одинарные непрямые указатели
-        // аллоцровать блок для прямых указателей или не надо решает состояние указателя
+        // аллоцировать блок для прямых указателей или не надо решает состояние указателя
         if (inodes[fd].indirect1_pointer == -1){   // непрямой одинарный указатель неинициализирован
             block_index = allocate_block();/////////////////////////////////////////////////////////////////
             inodes[fd].indirect1_pointer = block_index;
@@ -487,22 +486,21 @@
             return bytes_total_read;
         }
 
-//        if (inodes[fd].indirect3_pointer != -1){
-
-//        }else{
-//            return bytes_total_read;
-//        }
         return bytes_total_read;
     }
 
-     void Ext2FileSystem::dir(std::vector<std::string>& dir){
+     void Ext2FileSystem::dir(std::vector<DirEntry>& dir){
         dir.clear();
          if (superblock->free_inodes == superblock->total_inodes ) return ; //нет inodes
-
+         DirEntry de;
         for (int i=0; i < this->inode_bitmap->size(); i++){
             if (inode_bitmap->test(i)) {
                 std::string s(inodes[i].filename);
-                dir.push_back(s);
+                memcpy(de.filename,inodes[i].filename, inodes[i].fname_size);
+                de.filename[inodes[i].fname_size] = 0;
+                de.file_size = inodes[i].file_size;
+                de.creation_time = inodes[i].creation_time;
+                dir.push_back(de);
             }
         }
     }
