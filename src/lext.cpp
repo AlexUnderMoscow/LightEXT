@@ -2,68 +2,37 @@
 
     // Конструктор
     Ext2FileSystem::Ext2FileSystem(int total_blocks, int total_inodes) {
-        memory_size = total_blocks * BLOCK_SIZE;
-        // Выделение выровненной памяти в куче
-        memory = (char*)(std::aligned_alloc(16,memory_size));
-        std::memset(memory, 0, memory_size);
-
-        uint32_t block_index = 0;
-        uint64_t offset = block_index * BLOCK_SIZE;
-        superblock = (SuperBlock*)(memory + offset);
-
-        // Инициализация суперблока
-        superblock->total_blocks = total_blocks;
-        superblock->total_inodes = total_inodes;
-        superblock->free_blocks = total_blocks-1;
-        superblock->free_inodes = total_inodes;
-
-        superblock->MAX_INODES = MAX_INODES;
-        superblock->BLOCK_SIZE = BLOCK_SIZE;
-        superblock->MAX_BLOCKS = MAX_BLOCKS;
-        superblock->DIRECT_POINTERS = DIRECT_POINTERS;
-
-        // Инициализация битовых карт
-        void* target_address;
-        block_index++;
-        // аллоцируются inode_bitmap
-        offset = block_index * BLOCK_SIZE;
-        target_address = memory + offset;
-        inode_bitmap = new (target_address) std::bitset<MAX_INODES>();
-        // zero
-        memset(target_address,0,BLOCK_SIZE);
-        superblock->free_blocks--;
-
-
-        // alloc MAX_BLOCKS block_bitmap
-
-        block_index++;
-
-        offset = block_index * BLOCK_SIZE;
-        target_address = (void*)(memory + offset);
-        block_bitmap = new (target_address) std::bitset<MAX_BLOCKS>();
-        int blck_cnd = MAX_BLOCKS / (BLOCK_SIZE * 8);
-        memset(target_address,0,BLOCK_SIZE*blck_cnd);
-        block_bitmap->set(0); //superblock
-        block_bitmap->set(1); //inode_bitmap
-
-        for (int i = 0; i< blck_cnd; i++){
-            superblock->free_blocks--;
-            block_bitmap->set(i+2);
-        }
-
-        //  аллоцируются inodes
-        offset = (2+blck_cnd) * BLOCK_SIZE;
-        inodes = (Inode*)(memory + offset);
-        for (int i = 0; i< MAX_INODES; i++){
-            superblock->free_blocks--;
-            block_bitmap->set(i+2+blck_cnd);
-        }
+#ifndef __linux__
+        hMapFilr = NULL;
+        pBuf = NULL;
+#else
+        ptr = nullptr;
+        memory = nullptr;
+#endif
+        set_mem_ptr(memory, total_blocks, total_inodes);
         inode_index = 0;
     }
 
     // Деструктор
     Ext2FileSystem::~Ext2FileSystem() {
-        std::free(memory); // Освобождение памяти из кучи
+#ifndef __linux__
+        if (pBuf==NULL){
+            std::free(memory); // Освобождение памяти из кучи
+        }else{
+            // 5. Очищаем ресурсы
+            UnmapViewOfFile(pBuf);
+            CloseHandle(hMapFile);
+        }
+#else
+        if (ptr==nullptr){
+            std::free(memory); // Освобождение памяти из кучи
+        }else{
+            munmap(ptr, memory_size);
+            close(shm_fd);
+            shm_unlink(SHARED_MEM_NAME); // Удаляем shared memory
+        }
+#endif
+
     }
 
     // Функция для вычисления хеша FNV-1a
@@ -160,8 +129,8 @@
     }
 
     uint32_t Ext2FileSystem::open(const std::string& name) {
-        std::hash<std::string> hash;
-        size_t hash_in = hash(name);
+        //std::hash<std::string> hash;
+        size_t hash_in = fnv1a_hash(name.c_str(), name.size());
         for (uint32_t i = 0; i<inode_bitmap->size(); i++){
             if (inode_bitmap->test(i)){
                 if (inodes[i].name_hash == hash_in){
@@ -509,6 +478,62 @@
          return superblock->total_inodes-superblock->free_inodes;
     }
 
+     void Ext2FileSystem::share_mem(){
+        //memory_size
+         int a= 0;
+#ifndef __linux__
+        // 1. Открываем объект разделяемой памяти
+        hMapFile = CreateFileMapping(
+            INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, SHM_SIZE, SHM_NAME);
+
+        if (!hMapFile) {
+            std::cerr << "Ошибка CreateFileMapping\n";
+            return 1;
+        }
+
+        // 2. Отображаем память в адресное пространство процесса
+        pBuf = MapViewOfFile(hMapFile, FILE_MAP_WRITE, 0, 0, memory_size);
+        if (!pBuf) {
+            std::cerr << "Ошибка MapViewOfFile\n";
+            CloseHandle(hMapFile);
+            return 1;
+        }
+
+        // 3. Записываем данные
+        memcpy(pBuf, memory, memory_size);
+        std::free(memory); // Освобождение памяти из кучи
+        memory = (char*)pBuf;
+
+#else
+          // 1. Создаем (или открываем) shared memory
+         shm_fd = shm_open(SHARED_MEM_NAME, O_CREAT | O_RDWR, 0666);
+         if (shm_fd == -1) {
+             std::cerr << "Ошибка shm_open\n";
+             return;
+         }
+         // 2. Устанавливаем размер памяти
+         if (ftruncate(shm_fd, memory_size) == -1) {
+             std::cerr << "Ошибка ftruncate\n";
+             return;
+         }
+         // 3. Отображаем память в адресное пространство
+         void* ptr = mmap(0, memory_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+         if (ptr == MAP_FAILED) {
+             std::cerr << "Ошибка mmap\n";
+             return;
+         }
+
+         // 4. Записываем данные в разделяемую память
+         memcpy(ptr, (void*)memory, memory_size);
+         // теперь указатель на шару показывает
+        std::free(memory); // Освобождение памяти из кучи
+        memory = (char*)ptr;
+
+
+#endif
+        set_mem_ptr(nullptr);
+     }
+
      uint64_t Ext2FileSystem::size(uint32_t fd){
         return inodes[fd].file_size;
     }
@@ -519,6 +544,8 @@
             std::cout << "File in inode " << fd << " not found\n";
             return;
         }
+        if (!inode_bitmap->test(fd)) return; //inode пуст, файла нет
+
         Inode& inode = inodes[fd];
         uint32_t blocks = inode.file_size / BLOCK_SIZE;
         if (inode.file_size % BLOCK_SIZE != 0) blocks++;
@@ -583,6 +610,88 @@
 
         free_inode(fd);
         //std::cout << "File in inode " << fd << " deleted\n";
+    }
+
+    void Ext2FileSystem::set_mem_ptr(void* mem ,int total_blocks, int total_inodes){
+        if (mem!=nullptr){
+            std::free(memory);
+            memory = (char*)mem;
+        }else{
+            memory_size = total_blocks * BLOCK_SIZE;
+            // Выделение выровненной памяти в куче
+            memory = (char*)(std::aligned_alloc(16,memory_size));
+            std::memset(memory, 0, memory_size);
+
+        }
+            uint32_t block_index = 0;
+            uint64_t offset = block_index * BLOCK_SIZE;
+            superblock = (SuperBlock*)(memory + offset);
+
+        if (mem==nullptr){
+            // Инициализация суперблока
+            superblock->total_blocks = total_blocks;
+            superblock->total_inodes = total_inodes;
+            superblock->free_blocks = total_blocks-1;
+            superblock->free_inodes = total_inodes;
+
+            superblock->MAX_INODES = MAX_INODES;
+            superblock->BLOCK_SIZE = BLOCK_SIZE;
+            superblock->MAX_BLOCKS = MAX_BLOCKS;
+            superblock->DIRECT_POINTERS = DIRECT_POINTERS;
+        }
+            // Инициализация битовых карт
+            void* target_address;
+            block_index++;
+            // аллоцируются inode_bitmap
+            offset = block_index * BLOCK_SIZE;
+            target_address = memory + offset;
+            if (mem==nullptr){
+                inode_bitmap = new (target_address) std::bitset<MAX_INODES>();
+            }else{
+                inode_bitmap = (std::bitset<MAX_INODES>*)target_address;
+            }
+
+            if (mem==nullptr){
+                // zero
+                memset(target_address,0,BLOCK_SIZE);
+                superblock->free_blocks--;
+            }
+
+            // alloc MAX_BLOCKS block_bitmap
+
+            block_index++;
+
+            offset = block_index * BLOCK_SIZE;
+            target_address = (void*)(memory + offset);
+
+            if (mem==nullptr){
+                block_bitmap = new (target_address) std::bitset<MAX_BLOCKS>();
+            }else{
+                block_bitmap = (std::bitset<MAX_BLOCKS>*)target_address;
+            }
+
+            int blck_cnd = MAX_BLOCKS / (BLOCK_SIZE * 8);
+            if (mem==nullptr){
+                memset(target_address,0,BLOCK_SIZE*blck_cnd);
+                block_bitmap->set(0); //superblock
+                block_bitmap->set(1); //inode_bitmap
+
+                for (int i = 0; i< blck_cnd; i++){
+                    superblock->free_blocks--;
+                    block_bitmap->set(i+2);
+                }
+            }
+
+            //  аллоцируются inodes
+            offset = (2+blck_cnd) * BLOCK_SIZE;
+            inodes = (Inode*)(memory + offset);
+            if (mem==nullptr){
+                for (int i = 0; i< MAX_INODES; i++){
+                    superblock->free_blocks--;
+                    block_bitmap->set(i+2+blck_cnd);
+                }
+            }
+
     }
 
     // Вывод состояния файловой системы

@@ -8,6 +8,8 @@
 #include <chrono>
 #include <algorithm>
 
+Ext2FileSystem fs;
+
 // start MACRO TEST
 int failed = 0;
 #define TEST(name) void name()
@@ -28,7 +30,7 @@ failed = 1;                                       \
 //size_t fnv1a_hash(const char* buffer, size_t size);
 
 TEST(test_struct_size) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     ASSERT(sizeof(SuperBlock) == 4096);
     int s = sizeof(Inode);
     ASSERT(sizeof(Inode) == 4096);
@@ -36,7 +38,7 @@ TEST(test_struct_size) {
 }
 
 TEST(test_xtra_small_files) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     // Состояние файловой системы
     fs.print_fs_state();
     // Запись
@@ -69,7 +71,7 @@ TEST(test_xtra_small_files) {
 }
 
 TEST(test_small_file) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     // Имя файла для чтения
     const std::string filename = "../../testfiles/4K.txt";
     std::ifstream file(filename, std::ios::binary);
@@ -117,7 +119,7 @@ TEST(test_small_file) {
 }
 
 TEST(test_medium_file) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     // Имя файла для чтения
     const std::string filename = "../../testfiles/87K.jpg";
     std::ifstream file(filename, std::ifstream::ate | std::ifstream::binary);
@@ -177,7 +179,7 @@ TEST(test_medium_file) {
 }
 
 TEST(test_large_file) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     // Имя файла для чтения
     const std::string filename = "../../testfiles/279K.txt"; //xtra_large.txt
     std::ifstream file(filename, std::ifstream::ate | std::ifstream::binary);
@@ -254,7 +256,7 @@ TEST(test_large_file) {
 
 
 TEST(test_all_size) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     std::cout << "Before test" << std::endl;
     fs.print_fs_state();
     std::chrono::duration<double> write_time, read_time , rm_time;
@@ -368,7 +370,7 @@ TEST(test_all_size) {
 
 
 TEST(test_2x_files_all_size) {
-    Ext2FileSystem fs;
+    //Ext2FileSystem fs;
     std::cout << "Before test" << std::endl;
     fs.print_fs_state();
     std::chrono::duration<double> write_time, read_time , rm_time;
@@ -492,16 +494,29 @@ TEST(test_2x_files_all_size) {
         std::vector<DirEntry> dir;
         fs.dir(dir);
 
+
+
         for (int i=0; i<dir.size(); i++){
             std::string s(dir.at(i).filename);
             std::cout << s << " " << dir.at(i).file_size << " " << fs.time2str(dir.at(i).creation_time) <<std::endl;
         }
+
+        fs.share_mem();
+
+        std::cout << "Memory shared...waiting key..." << std::endl;
+
+        std::cin.get();
+
         fs.print_fs_state();
         fs.rm(fd1);
         fs.rm(fd2);
     }
-    std::cout << "End" << std::endl;
+
+
+
+
     fs.print_fs_state();
+    //std::cin.get();
     delete [] buf;
     delete [] buf2;
     delete [] buf_2;
@@ -545,9 +560,9 @@ void bitset_test(){
 int main() {
     //bitset_test();
     //return 0;
-    Ext2FileSystem fs;
+
     printf(GREEN_TEXT "%s\n" RESET_TEXT, "Tests:");
-    RUN_TEST(test_struct_size);
+    //RUN_TEST(test_struct_size);
 
     //RUN_TEST(test_xtra_small_files);
 
@@ -556,9 +571,10 @@ int main() {
     //RUN_TEST(test_medium_file);
 
     //RUN_TEST(test_large_file);
-    std::cout << std::flush;
+    //std::cout << std::flush;
     //RUN_TEST(test_all_size);
     RUN_TEST(test_2x_files_all_size);
+
 
 
     return 0;

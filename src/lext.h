@@ -1,3 +1,5 @@
+#ifndef LEXT_H
+#define LEXT_H
 
 #include <iostream>
 #include <algorithm>
@@ -9,6 +11,17 @@
 #include <bitset>
 #include <cstdlib>  // Для malloc/free
 #include <new>      // Для placement new
+#include <sstream>
+#include <iomanip>
+
+#ifndef __linux__
+    #include <windows.h>
+#else
+    #include <fcntl.h>    // O_* константы
+    #include <sys/mman.h> // shm_open, mmap
+    #include <unistd.h>   // ftruncate, close
+#endif
+
 
 // Константы
 const int BLOCK_SIZE = 4096;                            // Размер блока в байтах 1024
@@ -17,6 +30,8 @@ const int MAX_INODES = 1024;                            // Максимальн�
 const int INODE_SIZE = BLOCK_SIZE;                      // Размер inode в байтах
 const int RECORDS_CNT = BLOCK_SIZE >> 2;                // количество записей в блоке указателей
 const int DIRECT_POINTERS = 844;                        // количество прямых указателей на блоки
+
+
 
 // Структура суперблока
 struct SuperBlock {
@@ -68,12 +83,22 @@ private:
     size_t memory_size;                  // Общий размер памяти
     size_t inode_index;                  // при переборе next() inode_index движется вперед
 
+#ifndef __linux__
+    HANDLE hMapFile;
+    LPVOID pBuf;
+#else
+    void * ptr; // share_mem
+    int shm_fd; // mem_descriptor
+#endif
+
 public:
     // Конструктор
     Ext2FileSystem(int total_blocks = MAX_BLOCKS, int total_inodes = MAX_INODES);
     // Деструктор
     ~Ext2FileSystem() ;
 private:
+    //char SHARED_MEM_NAME[255]; // = "/LExtFS";
+    const char* SHARED_MEM_NAME = "/LExtFS";
     // Создание файла
     uint32_t create(const std::string& name);
     // Выделение блока
@@ -106,5 +131,9 @@ public:
     std::string time2str(time_t time);
     // Расчет хэша имени файла
     size_t fnv1a_hash(const char* buffer, size_t size);
-
+    // шарим память чтоб другой процесс мог читать
+    void share_mem();
+    void set_mem_ptr(void* memory, int total_blocks = MAX_BLOCKS, int total_inodes = MAX_INODES);
 };
+
+#endif
