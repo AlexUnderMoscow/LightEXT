@@ -2,12 +2,13 @@
 
     // Конструктор
     Ext2FileSystem::Ext2FileSystem(int total_blocks, int total_inodes) {
+        memory = nullptr;
 #ifndef __linux__
         hMapFile = NULL;
         pBuf = NULL;
 #else
         ptr = nullptr;
-        memory = nullptr;
+        shm_fd = 0;
 #endif
         set_mem_ptr(memory, total_blocks, total_inodes);
         inode_index = 0;
@@ -500,10 +501,7 @@
         }
 
         // 3. Записываем данные
-        memcpy(pBuf, memory, memory_size);
-        std::free(memory); // Освобождение памяти из кучи
-        memory = (char*)pBuf;
-
+        memcpy(pBuf, memory, memory_size);  
 #else
           // 1. Создаем (или открываем) shared memory
          shm_fd = shm_open(SHARED_MEM_NAME, O_CREAT | O_RDWR, 0666);
@@ -525,13 +523,8 @@
 
          // 4. Записываем данные в разделяемую память
          memcpy(ptr, (void*)memory, memory_size);
-         // теперь указатель на шару показывает
-        std::free(memory); // Освобождение памяти из кучи
-        memory = (char*)ptr;
-
-
 #endif
-        set_mem_ptr(nullptr);
+        set_mem_ptr((void*)pBuf);
      }
 
      uint64_t Ext2FileSystem::size(uint32_t fd){
@@ -614,7 +607,11 @@
 
     void Ext2FileSystem::set_mem_ptr(void* mem ,int total_blocks, int total_inodes){
         if (mem!=nullptr){
+#ifndef __linux__
+             VirtualFree(memory, 0, MEM_RELEASE);
+#else
             std::free(memory);
+#endif
             memory = (char*)mem;
         }else{
             memory_size = total_blocks * BLOCK_SIZE;
@@ -622,7 +619,7 @@
 #ifndef __linux__
             memory = (char*)VirtualAlloc(nullptr, memory_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 #else
-            memory = (char*)(std::aligned_alloc(16,memory_size));
+            memory = (char*)(std::aligned_alloc(BLOCK_SIZE,memory_size));
 #endif
 
             if (memory == nullptr) {

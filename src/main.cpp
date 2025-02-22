@@ -502,9 +502,7 @@ TEST(test_2x_files_all_size) {
         }
 
         fs.share_mem();
-
         std::cout << "Memory shared...waiting key..." << std::endl;
-
         std::cin.get();
 
         fs.print_fs_state();
