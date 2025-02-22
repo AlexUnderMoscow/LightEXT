@@ -1,6 +1,9 @@
 #ifndef LEXT_H
 #define LEXT_H
 
+#define NOMINMAX
+
+
 #include <iostream>
 #include <algorithm>
 #include <vector>

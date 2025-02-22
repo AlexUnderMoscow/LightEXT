@@ -3,7 +3,7 @@
     // Конструктор
     Ext2FileSystem::Ext2FileSystem(int total_blocks, int total_inodes) {
 #ifndef __linux__
-        hMapFilr = NULL;
+        hMapFile = NULL;
         pBuf = NULL;
 #else
         ptr = nullptr;
@@ -484,11 +484,11 @@
 #ifndef __linux__
         // 1. Открываем объект разделяемой памяти
         hMapFile = CreateFileMapping(
-            INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, SHM_SIZE, SHM_NAME);
+            INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, memory_size, SHARED_MEM_NAME);
 
         if (!hMapFile) {
             std::cerr << "Ошибка CreateFileMapping\n";
-            return 1;
+            return;
         }
 
         // 2. Отображаем память в адресное пространство процесса
@@ -496,7 +496,7 @@
         if (!pBuf) {
             std::cerr << "Ошибка MapViewOfFile\n";
             CloseHandle(hMapFile);
-            return 1;
+            return;
         }
 
         // 3. Записываем данные
@@ -619,7 +619,16 @@
         }else{
             memory_size = total_blocks * BLOCK_SIZE;
             // Выделение выровненной памяти в куче
+#ifndef __linux__
+            memory = (char*)VirtualAlloc(nullptr, memory_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#else
             memory = (char*)(std::aligned_alloc(16,memory_size));
+#endif
+
+            if (memory == nullptr) {
+                std::cerr << "Ошибка выделения памяти!" << std::endl;
+                return;
+            }
             std::memset(memory, 0, memory_size);
 
         }
