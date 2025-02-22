@@ -10,7 +10,7 @@
 - **In-memory operation:** Data is stored in RAM for ultra-fast access.
 - **Block size:** 4 KB ( = RAM page size).
 - **Direct pointers:** 844 (optimized for quick access).
-- **Maximum files:** 32768 (1 inode bitmap, 128 MB inodes).
+- **Maximum files:** 32768 (1 block inode bitmap, maximum 128 MB inodes).
 - **Maximum length of filename:** 511 ASCII chars.
 - **Single indirect pointer:** ✅ (Supported).
 - **Double indirect pointer:** ✅ (Supported).
@@ -25,7 +25,7 @@ Each file is represented by an **inode**, which contains:
 - **844 direct pointers** (each pointing to a 4 KB block).
 - **1 single indirect pointer** (points to a block containing 1024 additional pointers).
 - **1 double indirect pointer** (points to a block containing 1024 pointers, each pointing to another block of 1024 pointers).
-- **Other metadata** (file size, timestamps (in process...), etc.).
+- **Other metadata** (file size, timestamps, etc.).
 
 ### Maximum File Size Calculation
 
