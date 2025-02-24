@@ -501,7 +501,8 @@
         }
 
         // 3. Записываем данные
-        memcpy(pBuf, memory, memory_size);  
+        memcpy(pBuf, memory, memory_size);
+        set_mem_ptr((void*)pBuf);
 #else
           // 1. Создаем (или открываем) shared memory
          shm_fd = shm_open(SHARED_MEM_NAME, O_CREAT | O_RDWR, 0666);
@@ -523,8 +524,9 @@
 
          // 4. Записываем данные в разделяемую память
          memcpy(ptr, (void*)memory, memory_size);
+        set_mem_ptr(ptr);
 #endif
-        set_mem_ptr((void*)pBuf);
+
      }
 
      uint64_t Ext2FileSystem::size(uint32_t fd){
